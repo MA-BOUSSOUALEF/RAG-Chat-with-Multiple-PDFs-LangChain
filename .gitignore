@@ -1,3 +1,4 @@
 .env
-_pycache
-/LLM.ipynb
+/*
+testModele.py
+!faiss_index/

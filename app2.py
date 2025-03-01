@@ -2,13 +2,14 @@ import streamlit as st
 from dotenv import load_dotenv
 from PyPDF2 import PdfReader
 from langchain.text_splitter import CharacterTextSplitter
-from langchain_community.embeddings import OpenAIEmbeddings, HuggingFaceInstructEmbeddings
+from langchain_community.embeddings import OpenAIEmbeddings, HuggingFaceInstructEmbeddings, HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_community.chat_models import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationalRetrievalChain
 from htmlTemplates import css, bot_template, user_template
 from langchain_community.llms import HuggingFaceHub
+from sentence_transformers import SentenceTransformer
 
 def get_pdf_text(pdf_docs):
     text = ""
@@ -32,7 +33,8 @@ def get_text_chunks(text):
 
 def get_vectorstore(text_chunks):
     #embeddings = OpenAIEmbeddings()
-    embeddings = HuggingFaceInstructEmbeddings(model_name="hkunlp/instructor-xl")
+    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    # embeddings = HuggingFaceEmbeddings(model_name="BAAI/bge-small-en")
     vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
     return vectorstore
 
@@ -50,18 +52,28 @@ def get_conversation_chain(vectorstore):
     )
     return conversation_chain
 
-
 def handle_userinput(user_question):
+    # Appel de la conversation pour obtenir la réponse
     response = st.session_state.conversation({'question': user_question})
-    st.session_state.chat_history = response['chat_history']
+    
+    # Vérification si la réponse contient une conversation
+    if response and 'chat_history' in response:
+        # Dernier message du bot
+        last_bot_message = response['chat_history'][-1].content
 
-    for i, message in enumerate(st.session_state.chat_history):
-        if i % 2 == 0:
-            st.write(user_template.replace(
-                "{{MSG}}", message.content), unsafe_allow_html=True)
-        else:
-            st.write(bot_template.replace(
-                "{{MSG}}", message.content), unsafe_allow_html=True)
+        # Extraire la dernière ligne contenant "Helpful Answer:"
+        helpful_answer = None
+        for line in reversed(last_bot_message.splitlines()):  # Parcourir en sens inverse
+            if "Helpful Answer:" in line:
+                helpful_answer = line.replace("Helpful Answer:", "").strip()
+                break  # On s'arrête dès qu'on trouve la dernière occurrence
+        
+        # Afficher la question de l'utilisateur dans le template utilisateur
+        st.write(user_template.replace("{{MSG}}", user_question), unsafe_allow_html=True)
+        
+        # Afficher la dernière réponse utile dans le template du bot
+        if helpful_answer:
+            st.write(bot_template.replace("{{MSG}}", helpful_answer), unsafe_allow_html=True)
 
 
 def main():
@@ -102,3 +114,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
