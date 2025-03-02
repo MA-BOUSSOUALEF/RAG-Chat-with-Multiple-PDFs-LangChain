@@ -1,0 +1,16 @@
+langchain==0.3.18
+langchain-community==0.3.17
+langchain-core==0.3.34
+langchain-text-splitters==0.3.6
+streamlit==1.18.1
+PyPDF2==3.0.1
+python-dotenv==1.0.0
+faiss-cpu==1.7.4
+altair==4.0.0
+tiktoken==0.4.0
+huggingface-hub==0.28.1
+dnspython==2.7.0
+ipython==8.32.0
+python-dateutil==2.9.0.post0
+InstructorEmbedding==1.0.1
+sentence-transformers==3.4.1
