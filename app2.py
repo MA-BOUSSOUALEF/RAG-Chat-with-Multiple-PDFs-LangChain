@@ -1,66 +1,58 @@
+
 import streamlit as st
 from dotenv import load_dotenv
-import os
-import requests
 from PyPDF2 import PdfReader
 from langchain.text_splitter import CharacterTextSplitter
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.embeddings import OpenAIEmbeddings, HuggingFaceInstructEmbeddings, HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
-from langchain_community.llms import HuggingFaceHub
+from langchain_community.chat_models import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationalRetrievalChain
 from htmlTemplates import css, bot_template, user_template
-
-# Charger les variables d'environnement
-load_dotenv()
-HUGGING_FACE_TOKEN = os.getenv("HUGGING_FACE_TOKEN")
-
-def download_pdf(url):
-    """Télécharge un fichier PDF depuis une URL et le sauvegarde temporairement."""
-    response = requests.get(url)
-    if response.status_code == 200:
-        temp_path = "/tmp/temp_pdf.pdf"
-        with open(temp_path, "wb") as f:
-            f.write(response.content)
-        return temp_path
-    else:
-        st.error("❌ Failed to download PDF. Please check the URL.")
-        return None
+from langchain_community.llms import HuggingFaceHub
+from sentence_transformers import SentenceTransformer
 
 def get_pdf_text(pdf_docs):
-    """Extrait le texte de fichiers PDF."""
     text = ""
     for pdf in pdf_docs:
         pdf_reader = PdfReader(pdf)
         for page in pdf_reader.pages:
-            text += page.extract_text() or ""
+            text += page.extract_text()
     return text
 
+
 def get_text_chunks(text):
-    """Divise le texte en morceaux pour un meilleur traitement."""
-    text_splitter = CharacterTextSplitter(separator="\n", chunk_size=1000, chunk_overlap=200, length_function=len)
-    return text_splitter.split_text(text)
+    text_splitter = CharacterTextSplitter(
+        separator="\n",
+        chunk_size=1000,
+        chunk_overlap=200,
+        length_function=len
+    )
+    chunks = text_splitter.split_text(text)
+    return chunks
+
 
 def get_vectorstore(text_chunks):
-    """Crée un index vectoriel FAISS à partir des morceaux de texte."""
+    #embeddings = OpenAIEmbeddings()
     embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-    return FAISS.from_texts(texts=text_chunks, embedding=embeddings)
+    # embeddings = HuggingFaceEmbeddings(model_name="BAAI/bge-small-en")
+    vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
+    return vectorstore
+
 
 def get_conversation_chain(vectorstore):
-    """Configure la chaîne de conversation avec mémoire."""
-    llm = HuggingFaceHub(repo_id="google/flan-t5-xxl",
-                         model_kwargs={"temperature": 0.5, "max_length": 512},
-                         task="text-generation",
-                         huggingfacehub_api_token=HUGGING_FACE_TOKEN)
-    memory = ConversationBufferMemory(memory_key='chat_history', return_messages=True)
-    return ConversationalRetrievalChain.from_llm(llm=llm, retriever=vectorstore.as_retriever(), memory=memory)
+    #llm = ChatOpenAI()
+    llm = HuggingFaceHub(repo_id="google/flan-t5-xxl", model_kwargs={"temperature":0.5, "max_length":512},task="text-generation")
 
-def handle_userinput(user_question):
-    """Gère l'entrée utilisateur et affiche la réponse."""
-    response = st.session_state.conversation({'question': user_question})
-    if response and 'chat_history' in response:
-        last_bot_message = response['chat_history'][-1].content
-        
+    memory = ConversationBufferMemory(
+        memory_key='chat_history', return_messages=True)
+    conversation_chain = ConversationalRetrievalChain.from_llm(
+        llm=llm,
+        retriever=vectorstore.as_retriever(),
+        memory=memory
+    )
+    return conversation_chain
+
 def handle_userinput(user_question, response_container):
     """Gère l'entrée utilisateur et affiche la réponse complète depuis la fin jusqu'à 'Helpful Answer:'."""
     response = st.session_state.conversation({'question': user_question})
@@ -83,12 +75,12 @@ def handle_userinput(user_question, response_container):
             st.write(bot_template.replace("{{MSG}}", extracted_answer), unsafe_allow_html=True)
 
 
-
 def main():
+    
     """Interface utilisateur principale avec Streamlit."""
     st.set_page_config(page_title="Chat with PDFs", page_icon=":books:")
     st.write(css, unsafe_allow_html=True)
-
+    load_dotenv()
     if "conversation" not in st.session_state:
         st.session_state.conversation = None
     if "processed" not in st.session_state:
@@ -132,7 +124,7 @@ def main():
                     st.success("✅ Processing complete! You can now ask questions.")
                     st.experimental_rerun()  # 🔄 Rafraîchit pour activer le champ de saisie
 
+
 if __name__ == '__main__':
     main()
-
 
